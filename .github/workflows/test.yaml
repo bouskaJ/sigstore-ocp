@@ -72,12 +72,58 @@ jobs:
       - name: Configure KinD
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          kubectl patch configmap/ingress-nginx-controller -n ingress-nginx -p '{"data":{"allow-snippet-annotations":"true"}}'
           kubectl apply -f ./kind/servicemonitor-crd.yaml
           kubectl create ns fulcio-system
           kubectl create ns rekor-system
           kubectl -n fulcio-system create secret generic fulcio-secret-rh --from-file=private=./kind/testing-only-cert-key/file_ca_key.pem --from-file=public=./kind/testing-only-cert-key/file_ca_pub.pem --from-file=cert=./kind/testing-only-cert-key/fulcio-root.pem  --from-literal=password=secure --dry-run=client -o yaml | oc apply -f-
           kubectl -n rekor-system create secret generic rekor-private-key --from-file=private=./kind/testing-only-cert-key/rekor_key.pem --dry-run=client -o yaml | oc apply -f-
           kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+        shell: bash
+
+      - name: Install Keycloak
+        run: |
+          #install OLM
+          kubectl create -f https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.25.0/crds.yaml
+          # wait for a while to be sure CRDs are installed
+          sleep 1
+          kubectl create -f https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.25.0/olm.yaml
+          #install upstream version of keycloak
+          kubectl create ns keycloak-system
+          kubectl create -f - << EOF
+          apiVersion: operators.coreos.com/v1alpha2
+          kind: OperatorGroup
+          metadata:
+              name: keycloak-group
+              namespace: keycloak-system
+          spec:
+            targetNamespaces:
+            - keycloak-system
+          ---
+          apiVersion: operators.coreos.com/v1alpha1
+          kind: Subscription
+          metadata:
+            name: keycloak-operator
+            namespace: keycloak-system
+          spec:
+            channel: alpha
+            name: keycloak-operator
+            source: operatorhubio-catalog
+            sourceNamespace: olm
+          EOF
+          until [ ! -z "$(kubectl get pod -l name=keycloak-operator -n keycloak-system 2>/dev/null)" ]
+          do
+            echo "Waiting for keycloak operator. Pods in keycloak-system namespace:"
+            kubectl get pods -n keycloak-system
+            sleep 10
+          done
+          kubectl apply --kustomize keycloak/resources
+          until [ ! -z "$(kubectl get pod -l component=keycloak -n keycloak-system 2>/dev/null)" ]
+          do
+            echo "Waiting for keycloak deployment. Pods in keycloak-system namespace:"
+            kubectl get pods -n keycloak-system
+            sleep 10
+          done
         shell: bash
 
       # tests are in charts/trusted-artifact-signer/templates/tests
