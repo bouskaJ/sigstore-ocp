@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: trusted-artifact-signer-test-sign-verify
+  labels:
+    app.kubernetes.io/component: trusted-artifact-signer
+  annotations:
+      helm.sh/hook: test
+spec:
+    initContainers:
+      - name: buildah
+        image: quay.io/buildah/stable
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+            buildah pull alpine:latest
+            buildah tag alpine:latest ttl.sh/sigstore-test:5m
+            buildah push ttl.sh/sigstore-test:5m
+        securityContext:
+            privileged: true
+            runAsUser: 1000
+    containers:
+      - name: cosign
+        image: "{{ .Values.configs.cosign.image.registry }}/{{ .Values.configs.cosign.image.repository }}:{{ .Values.configs.cosign.image.version }}"
+        env:
+        - name: OPENSHIFT_APPS_SUBDOMAIN
+          value: {{ .Values.configs.cosign.appsSubdomain }}
+        - name: OIDC_AUTHENTICATION_REALM
+          value: "sigstore"
+        - name: FULCIO_URL
+          value: "https://fulcio.$(OPENSHIFT_APPS_SUBDOMAIN)"
+        - name: OIDC_ISSUER_URL
+          value: "https://keycloak-keycloak-system.$(OPENSHIFT_APPS_SUBDOMAIN)/auth/realms/$(OIDC_AUTHENTICATION_REALM)"
+        - name: REKOR_URL
+          value: "https://rekor.$(OPENSHIFT_APPS_SUBDOMAIN)"
+        - name: TUF_URL
+          value: "https://tuf.$(OPENSHIFT_APPS_SUBDOMAIN)"
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            cosign initialize --mirror=$TUF_URL --root=$TUF_URL/root.json
+            TOKEN=$(curl -X POST -H "Content-Type: application/x-www-form-urlencoded" -d "username=jdoe" -d "password=secure" -d "grant_type=password" -d "scope=openid" -d "client_id=sigstore" $OIDC_ISSUER_URL/protocol/openid-connect/token |  sed -E 's/.*"access_token":"([^"]*).*/\1/')
+            cosign sign -y --fulcio-url=$FULCIO_URL --rekor-url=$REKOR_URL --oidc-issuer=$OIDC_ISSUER_URL --identity-token=$TOKEN ttl.sh/sigstore-test:5m
+            cosign verify --rekor-url=$REKOR_URL --certificate-identity-regexp ".*@redhat" --certificate-oidc-issuer-regexp ".*keycloak.*" ttl.sh/sigstore-test:5m
+    restartPolicy: Never
