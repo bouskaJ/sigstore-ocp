@@ -27,29 +27,28 @@ scaffold:
       enabled: false
     server:
       ingress:
-        http:
-          hosts:
-            - host: fulcio.localhost
-              path: /
+          enabled: false
+          http:
+            enabled: false
     config:
       contents:
         OIDCIssuers:
           # https://<keycloak_instance>.<keycloak_ns>.<openshift_apps_subdomain>/auth/realms/sigstore
-          ? https://keycloak-keycloak-system.apps.open-svc-sts.k1wl.p1.openshiftapps.com/auth/realms/sigstore
-          : IssuerURL: https://keycloak-keycloak-system.apps.open-svc-sts.k1wl.p1.openshiftapps.com/auth/realms/sigstore
+          ? http://keycloak-internal.keycloak-system/auth/realms/sigstore
+          : IssuerURL: http://keycloak-internal.keycloak-system/auth/realms/sigstore
             ClientID: sigstore
             Type: email
   rekor:
     clusterMonitoring:
       enabled: false
+      http:
+        enabled: false
     server:
       ingress:
-        hosts:
-          - host: rekor.localhost
-            path: /
+          enabled: false
+          http:
+            enabled: false
   tuf:
     ingress:
-      http:
-        hosts:
-          - host: tuf.localhost
-            path: /
+        create: false
+

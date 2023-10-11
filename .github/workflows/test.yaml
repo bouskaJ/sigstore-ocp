@@ -95,6 +95,29 @@ jobs:
           oc wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
         shell: bash
 
+      - name: Install Keycloak
+        run: |
+          #install OLM
+          kubectl create -f https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.25.0/crds.yaml
+          # wait for a while to be sure CRDs are installed
+          sleep 1
+          kubectl create -f https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.25.0/olm.yaml
+          kubectl create --kustomize keycloak/operator/overlay/kind
+          until [ ! -z "$(kubectl get pod -l name=keycloak-operator -n keycloak-system 2>/dev/null)" ]
+          do
+            echo "Waiting for keycloak operator. Pods in keycloak-system namespace:"
+            kubectl get pods -n keycloak-system
+            sleep 10
+          done
+          kubectl create --kustomize keycloak/resources/overlay/kind
+          until [ ! -z "$(kubectl get pod -l component=keycloak -n keycloak-system 2>/dev/null)" ]
+          do
+            echo "Waiting for keycloak deployment. Pods in keycloak-system namespace:"
+            kubectl get pods -n keycloak-system
+            sleep 10
+          done
+        shell: bash
+
       # tests are in charts/trusted-artifact-signer/templates/tests
       - name: Run chart-testing (install)
         run: |

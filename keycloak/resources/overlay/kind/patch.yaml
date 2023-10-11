@@ -1,0 +1,15 @@
+apiVersion: keycloak.org/v1alpha1
+kind: Keycloak
+metadata:
+  name: keycloak
+spec:
+  externalAccess:
+    enabled: false
+---
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakRealm
+metadata:
+  name: sigstore
+spec:
+  realm:
+    sslRequired: none
